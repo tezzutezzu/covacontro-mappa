@@ -164,10 +164,6 @@
             data: geojsonData
         });
 
-        // Make "Citizen science" the default selected category on initial load
-        filterSelect.value = 'Citizen science';
-        filterSelect.dispatchEvent(new Event('change'));
-
         // Add a layer using an 'match' expression to dynamically color points based on Category
         map.addLayer({
             id: 'points-layer',
@@ -193,9 +189,13 @@
         // --- FILTERING LOGIC ---
         const filterSelect = document.getElementById('category-filter');
         
+        // Make "Citizen science" the default selected category on initial load
+        filterSelect.value = 'Citizen science';
+        filterSelect.dispatchEvent(new Event('change'));
+
         filterSelect.addEventListener('change', (e) => {
             const selectedCategory = e.target.value;
-let targetFeatures = [];
+            let targetFeatures = [];
 
             if (selectedCategory === 'all') {
                 // 1. Clear filters to show all points
