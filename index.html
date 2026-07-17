@@ -89,7 +89,7 @@
 
     <select id="category-filter">
         <option value="all">Mostra tutto</option>
-        <option value="Citizen science">Citizen science</option>
+        <option value="Citizen science" selected>Citizen science</option>
         <option value="Minacce">Minacce</option>
         <option value="Inchiesta">Inchiesta</option>
         <option value="Manifestazioni">Manifestazioni</option>
@@ -163,6 +163,10 @@
             type: 'geojson',
             data: geojsonData
         });
+
+        // Make "Citizen science" the default selected category on initial load
+        filterSelect.value = 'Citizen science';
+        filterSelect.dispatchEvent(new Event('change'));
 
         // Add a layer using an 'match' expression to dynamically color points based on Category
         map.addLayer({
