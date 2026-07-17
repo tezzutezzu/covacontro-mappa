@@ -54,6 +54,23 @@
             cursor: pointer;
         }
 
+        .loading-indicator {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 20;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 10px 14px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+            font-size: 13px;
+            color: #111827;
+        }
+
+        .hidden {
+            display: none;
+        }
+
         /* Clean Popups */
         .custom-popup { padding: 5px;  }
         .custom-popup h3 { margin: 0 0 5px 0; font-size: 15px; color: #111827; }
@@ -86,17 +103,13 @@
 
 <!-- Floating Control Box -->
 <div class="control-panel">
-    <select id="category-filter">
-        <option value="Citizen science" selected>Citizen science</option>
-        <option value="Minacce">Minacce</option>
-        <option value="Inchiesta">Inchiesta</option>
-        <option value="Manifestazioni">Manifestazioni</option>
-        <option value="Ricognizione">Ricognizione</option>
-        <option value="all">Mostra tutto</option>
+    <select id="category-filter" disabled>
+        <option value="" selected>Caricamento categorie...</option>
     </select>
 </div>
 
 <div id="map"></div>
+<div id="loading-indicator" class="loading-indicator">Caricamento dati...</div>
 
 <script>
     // Paste your published Google Sheets TSV URL here
@@ -120,7 +133,12 @@
 
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+    const filterSelect = document.getElementById('category-filter');
+    const loadingIndicator = document.getElementById('loading-indicator');
+
     map.on('load', () => {
+        loadingIndicator.classList.remove('hidden');
+
         fetch(TSV_URL)
             .then(response => response.text())
             .then(tsvText => {
@@ -133,8 +151,40 @@
                     }
                 });
             })
-            .catch(err => console.error("Error loading spreadsheet data: ", err));
+            .catch(err => console.error("Error loading spreadsheet data: ", err))
+            .finally(() => loadingIndicator.classList.add('hidden'));
     });
+
+    function populateCategoryDropdown(categories) {
+        filterSelect.innerHTML = '';
+
+        const normalizedCategories = categories.filter(Boolean).map(c => c.trim()).filter(Boolean);
+        const uniqueCategories = Array.from(new Set(normalizedCategories)).sort((a, b) => a.localeCompare(b, 'it', { sensitivity: 'base' }));
+
+        uniqueCategories.forEach(category => {
+            const option = document.createElement('option');
+            option.value = category;
+            option.textContent = category;
+            filterSelect.appendChild(option);
+        });
+
+        const allOption = document.createElement('option');
+        allOption.value = 'all';
+        allOption.textContent = 'Mostra tutto';
+        filterSelect.appendChild(allOption);
+
+        filterSelect.disabled = false;
+
+        if (uniqueCategories.includes('Citizen science')) {
+            filterSelect.value = 'Citizen science';
+        } else if (uniqueCategories.length > 0) {
+            filterSelect.value = uniqueCategories[0];
+        } else {
+            filterSelect.value = 'all';
+        }
+
+        filterSelect.dispatchEvent(new Event('change'));
+    }
 
     function renderDataPoints(rows) {
         const features = rows.map(row => {
@@ -152,6 +202,9 @@
                 properties: row 
             };
         }).filter(Boolean);
+
+        const categories = rows.map(row => row.Category || '');
+        populateCategoryDropdown(categories);
 
         const geojsonData = {
             type: 'FeatureCollection',
