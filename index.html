@@ -86,14 +86,13 @@
 
 <!-- Floating Control Box -->
 <div class="control-panel">
-
     <select id="category-filter">
-        <option value="all">Mostra tutto</option>
         <option value="Citizen science" selected>Citizen science</option>
         <option value="Minacce">Minacce</option>
         <option value="Inchiesta">Inchiesta</option>
         <option value="Manifestazioni">Manifestazioni</option>
         <option value="Ricognizione">Ricognizione</option>
+        <option value="all">Mostra tutto</option>
     </select>
 </div>
 
@@ -189,10 +188,6 @@
         // --- FILTERING LOGIC ---
         const filterSelect = document.getElementById('category-filter');
         
-        // Make "Citizen science" the default selected category on initial load
-        filterSelect.value = 'Citizen science';
-        filterSelect.dispatchEvent(new Event('change'));
-
         filterSelect.addEventListener('change', (e) => {
             const selectedCategory = e.target.value;
             let targetFeatures = [];
@@ -217,6 +212,7 @@
                 targetFeatures = features.filter(f => f.properties.Category === selectedCategory);
             }
 
+
             // 4. Smoothly zoom the map to fit only the filtered points
             if (targetFeatures.length > 0) {
                 const bounds = new maplibregl.LngLatBounds();
@@ -229,6 +225,10 @@
                 });
             }
         });
+
+        // Make "Citizen science" the default selected category on initial load
+        filterSelect.value = 'Citizen science';
+        filterSelect.dispatchEvent(new Event('change'));
 
         function getYouTubeEmbedUrl(url) {
             if (!url) return '';
@@ -302,11 +302,6 @@
         map.on('mouseenter', 'points-layer', () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', 'points-layer', () => { map.getCanvas().style.cursor = ''; });
         
-        if (features.length > 0) {
-            const bounds = new maplibregl.LngLatBounds();
-            features.forEach(f => bounds.extend(f.geometry.coordinates));
-            map.fitBounds(bounds, { padding: 50, maxZoom: 14 });
-        }
     }
 </script>
 </body>
