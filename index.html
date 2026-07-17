@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <title>Non-Profit Filterable Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    
+    <!-- 1. MapLibre GL JS CDN -->
+    <script src="https://unpkg.com/maplibre-gl@4.7.0/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl@4.7.0/dist/maplibre-gl.css" rel="stylesheet" />
+    
+    <!-- 2. PapaParse CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/mapbox-gl-spiderifier@1.0.10/index.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/mapbox-gl-spiderifier@1.0.10/index.min.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        #map { position: absolute; top: 0; bottom: 0; width: 100%; }
+        
+        /* Floating Control Panel for the Dropdown */
+        .control-panel {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            max-width: 280px;
+        }
+        .control-panel h2 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+            color: #1f2937;
+        }
+        .control-panel label {
+            font-size: 12px;
+            color: #6b7280;
+            display: block;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            font-weight: bold;
+            letter-spacing: 0.5px;
+        }
+        .control-panel select {
+            width: 100%;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid #d1d5db;
+            background-color: #fff;
+            font-size: 14px;
+            outline: none;
+            cursor: pointer;
+        }
+
+        /* Clean Popups */
+        .custom-popup { padding: 5px;  }
+        .custom-popup h3 { margin: 0 0 5px 0; font-size: 15px; color: #111827; }
+        .custom-popup p { margin: 0; font-size: 13px; color: #4b5563; line-height: 1.4; }
+        .category-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: bold;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-top: 8px;
+            color: white;
+        }
+
+        .maplibregl-popup-content{
+                background: #ffe55d;
+                padding-top:30px;
+        }
+       .maplibregl-popup-anchor-top .maplibregl-popup-tip {
+            border-bottom-color: #ffe55d;
+        }
+
+        .maplibregl-popup-close-button {
+
+            font-size: 30px;
+        }
+    </style>
+</head>
+<body>
+
+<!-- Floating Control Box -->
+<div class="control-panel">
+
+    <select id="category-filter">
+        <option value="all">Mostra tutto</option>
+        <option value="Citizen science">Citizen science</option>
+        <option value="Minacce">Minacce</option>
+        <option value="Inchiesta">Inchiesta</option>
+        <option value="Manifestazioni">Manifestazioni</option>
+        <option value="Ricognizione">Ricognizione</option>
+    </select>
+</div>
+
+<div id="map"></div>
+
+<script>
+    // Paste your published Google Sheets TSV URL here
+    const TSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS99tDJh2fTdNb7vl9QzOEdPntVJjJRADZGz85FMF91sGVGBw6rByxdMtyWpWJ9iY23dqnFXrPG8Rhj/pub?gid=76361145&single=true&output=tsv";
+
+    // Map matching category names to specific visual colors
+    const categoryColors = {
+        "Citizen science": "#10b981",  // Emerald Green
+        "Minacce": "#ef4444",          // Bright Red
+        "Inchiesta": "#f59e0b",         // Warm Amber/Orange
+        "Manifestazioni": "#8b5cf6",    // Violet Purple
+        "Ricognizione": "#3b82f6"       // Ocean Blue
+    };
+
+    const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json', 
+        center: [16.60, 40.66], // Centered near Matera, Italy as an example
+        zoom: 12
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    map.on('load', () => {
+        fetch(TSV_URL)
+            .then(response => response.text())
+            .then(tsvText => {
+                Papa.parse(tsvText, {
+                    header: true,
+                    delimiter: "\t", 
+                    skipEmptyLines: true,
+                    complete: function(results) {
+                        renderDataPoints(results.data);
+                    }
+                });
+            })
+            .catch(err => console.error("Error loading spreadsheet data: ", err));
+    });
+
+    function renderDataPoints(rows) {
+        const features = rows.map(row => {
+            const lng = parseFloat(row.Longitude);
+            const lat = parseFloat(row.Latitude);
+            
+            if (isNaN(lng) || isNaN(lat)) return null;
+
+            return {
+                type: 'Feature',
+                geometry: {
+                    type: 'Point',
+                    coordinates: [lng, lat]
+                },
+                properties: row 
+            };
+        }).filter(Boolean);
+
+        const geojsonData = {
+            type: 'FeatureCollection',
+            features: features
+        };
+
+        map.addSource('spreadsheet-points', {
+            type: 'geojson',
+            data: geojsonData
+        });
+
+        // Add a layer using an 'match' expression to dynamically color points based on Category
+        map.addLayer({
+            id: 'points-layer',
+            type: 'circle',
+            source: 'spreadsheet-points',
+            paint: {
+                'circle-radius': 8,
+                'circle-color': [
+                    'match',
+                    ['get', 'Category'], // Your TSV column must be named 'Category'
+                    'Citizen science', categoryColors['Citizen science'],
+                    'Minacce', categoryColors['Minacce'],
+                    'Inchiesta', categoryColors['Inchiesta'],
+                    'Manifestazioni', categoryColors['Manifestazioni'],
+                    'Ricognizione', categoryColors['Ricognizione'],
+                    '#9ca3af' // Default fallback color (gray) if category doesn't match
+                ],
+                'circle-stroke-width': 1.5,
+                'circle-stroke-color': '#ffffff'
+            }
+        });
+
+        // --- FILTERING LOGIC ---
+        const filterSelect = document.getElementById('category-filter');
+        
+        filterSelect.addEventListener('change', (e) => {
+            const selectedCategory = e.target.value;
+let targetFeatures = [];
+
+            if (selectedCategory === 'all') {
+                // 1. Clear filters to show all points
+                map.setFilter('points-layer', null);
+                // If using clustering (Option 2), also clear cluster filters:
+                if (map.getLayer('clusters')) map.setFilter('clusters', null);
+                if (map.getLayer('cluster-count')) map.setFilter('cluster-count', null);
+                
+                targetFeatures = features; // Zoom to fit all points
+            } else {
+                // 2. Filter the visible points on the map
+                const filterExpression = ['==', ['get', 'Category'], selectedCategory];
+                map.setFilter('points-layer', filterExpression);
+                // If using clustering (Option 2), apply filter to them too:
+                if (map.getLayer('clusters')) map.setFilter('clusters', ['has', 'point_count']); 
+                if (map.getLayer('cluster-count')) map.setFilter('cluster-count', ['has', 'point_count']);
+
+                // 3. Filter our local array to find only matching points
+                targetFeatures = features.filter(f => f.properties.Category === selectedCategory);
+            }
+
+            // 4. Smoothly zoom the map to fit only the filtered points
+            if (targetFeatures.length > 0) {
+                const bounds = new maplibregl.LngLatBounds();
+                targetFeatures.forEach(f => bounds.extend(f.geometry.coordinates));
+                
+                map.fitBounds(bounds, { 
+                    padding: 60,       // Padding in pixels around the edge of the map
+                    maxZoom: 14,       // Prevents crazy close-up zooms if there is only 1 point in a category
+                    duration: 1200     // Animation duration in milliseconds (smooth transition)
+                });
+            }
+        });
+
+        function getYouTubeEmbedUrl(url) {
+            if (!url) return '';
+            
+            let videoId = '';
+            
+            // Handles standard watch links: youtube.com/watch?v=ID
+            if (url.includes('youtube.com/watch')) {
+                const urlParams = new URLSearchParams(new URL(url).search);
+                videoId = urlParams.get('v');
+            } 
+            // Handles short share links: youtu.be/ID
+            else if (url.includes('youtu.be/')) {
+                videoId = url.split('youtu.be/')[1].split('?')[0];
+            } 
+            // Handles already formatted embed links just in case
+            else if (url.includes('youtube.com/embed/')) {
+                return url;
+            }
+
+            return videoId ? `https://www.youtube.com/embed/${videoId}` : '';
+        }
+
+        // Click interaction for popups
+        map.on('click', 'points-layer', (e) => {
+            const coordinates = e.features[0].geometry.coordinates.slice();
+            const props = e.features[0].properties;
+            const category = props.Category || 'Unknown';
+            const color = categoryColors[category] || '#9ca3af';
+
+            // 1. Get the safe embed URL from the column (assuming column header is "Video")
+            const rawVideoUrl = props.Link || ''; 
+            const embedVideoUrl = getYouTubeEmbedUrl(rawVideoUrl);
+
+            // 2. Build the video iframe if a valid URL was found
+            let videoHTML = '';
+            if (embedVideoUrl) {
+                videoHTML = `
+                    <div style="margin-top: 10px; position: relative; padding-bottom: 56.25%; height: 0; overflow: hidden;">
+                        <iframe 
+                            src="${embedVideoUrl}" 
+                            style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: 0;" 
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                            allowfullscreen>
+                        </iframe>
+                    </div>
+                `;
+            }
+
+            const popupHTML = `
+                <div class="custom-popup" style="width: 600px;">
+                    <h3>${props.Title || 'Senza Titolo'}</h3>
+                    <span class="category-badge" style="background-color: ${color}">
+                        ${category}
+                    </span>
+                    ${videoHTML} 
+                </div>
+            `;
+
+            while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
+                coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
+            }
+
+            // Increase the max-width of the popup container to nicely fit the video iframe
+            new maplibregl.Popup({ offset: 10, maxWidth: '650px' })
+                .setLngLat(coordinates)
+                .setHTML(popupHTML)
+                .addTo(map);
+        });
+
+        map.on('mouseenter', 'points-layer', () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', 'points-layer', () => { map.getCanvas().style.cursor = ''; });
+        
+        if (features.length > 0) {
+            const bounds = new maplibregl.LngLatBounds();
+            features.forEach(f => bounds.extend(f.geometry.coordinates));
+            map.fitBounds(bounds, { padding: 50, maxZoom: 14 });
+        }
+    }
+</script>
+</body>
+</html>
